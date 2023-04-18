@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -----------------------------------------------------------------
 ・TM1638plus
 (https://github.com/gavinlyonsrepo/TM1638plus)
-
 GNU GENERAL PUBLIC LICENSE
 
 Version 3, 29 June 2007
