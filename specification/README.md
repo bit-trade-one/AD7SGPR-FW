@@ -46,7 +46,7 @@ USB経由のCOMポート通信により外部ディスプレイのような振�
 graph LR
 
 A[文字列] 
-B[変数_rxStrrxStr]
+B[変数_rxStr]
 C[7セグに表示]
 
 A-->|挿入|B
