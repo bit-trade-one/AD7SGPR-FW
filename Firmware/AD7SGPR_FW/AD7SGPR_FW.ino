@@ -154,6 +154,7 @@ void displayReceivedData(const String& data) {
 void handleReceivedData(const String& data) {
   // 受信データが "?CLR" の場合、画面クリア処理を実行
   tm.reset();
+  displayCleared = true;  // ディスプレイが消去されたことを示すフラグを設定
   // 表示状態を保存する配列をリセット
   //memset(displayValues, 0, sizeof(displayValues));
   Serial.println("画面クリアコマンドが受信されました。7セグメントディスプレイを消去しました。");
