@@ -1,4 +1,4 @@
-//bto_ODA_230425V0.7
+//bto_ODA_230426V0.821
 //発売時のVendorID:0x22EA
 //発売時のProductID:-
 
@@ -35,6 +35,9 @@ int eol_index = 0;  //0 :  \r\n （CRLF、Windows の場合）1 : \r （CR、古
 String rxStr = "";  // 受信した文字列を格納するための変数を宣言します。
 
 bool displayCleared = false;  // ディスプレイが消去されたかどうかを示すフラグを追加
+
+bool Bstate = false;
+bool BlastState = false;
 
 
 
@@ -79,9 +82,8 @@ bool isEndOfLine(char ch) {  //改行文字
   return (ch == eol[0]) || (ch == eol[1]);
 }
 
-
 void readSerialData() {
-  //読み出しシリアルデータ
+  // 読み出しシリアルデータ
   static String buffer = "";
 
   // シリアルバッファにデータがある場合
@@ -89,14 +91,16 @@ void readSerialData() {
     char ch = Serial.read();
     if (isEndOfLine(ch)) {
       if (buffer.length() > 0) {
-        rxStr = buffer;
+        String rxStr = buffer;
         buffer = "";
 
         // 各種処理関数呼び出し
         if (rxStr == "?CLR") {
           handleReceivedData(rxStr);
-        } else if (rxStr.charAt(0) == '?') {
-          processSegmentControlCommand(rxStr.substring(1));
+        } else if (rxStr.startsWith("?HEX")) {
+          displayHexPattern(rxStr.substring(4));  // 受信データを16進数として表示
+        } else if (rxStr.startsWith("?SGA")) {
+          processSegmentControlCommand(rxStr.substring(4));
         } else {
           displayReceivedData(rxStr);  // 受信データを表示
         }
@@ -146,9 +150,8 @@ void displayReceivedData(const String& data) {
 
   // 右詰めの文字列を表示
   tm.displayText(rightAlignedString.c_str());
+   displayCleared = false;
 }
-
-
 
 
 void handleReceivedData(const String& data) {
@@ -163,7 +166,7 @@ void handleReceivedData(const String& data) {
 bool processSegmentControlCommand(const String& command) {
   //セグメント個別制御
   // 受信データをシリアルモニタに表示
-  Serial.print("受信データ: ?");
+  Serial.print("受信データ: ?SGA");
   Serial.println(command);
   if (command.length() < 2) {
     return false;
@@ -220,38 +223,75 @@ bool processSegmentControlCommand(const String& command) {
   return true;
 }
 
+void displayHexPattern(const String &hexData) {
+  // 16進数パターン表示?HEX
+  
+  if (hexData.length() != 16) {
+    Serial.println("エラー: 16桁の16進数データが必要です");
+    return;
+  }
+  
+  for (int i = 0; i < 8; i++) {
+    String hexPair = hexData.substring(i * 2, i * 2 + 2);
+    uint8_t hexValue = (uint8_t)strtol(hexPair.c_str(), NULL, 16);
+    tm.display7Seg(i, hexValue);
+  }
+
+  // 正常に出力された際のシリアルモニタへのログ出力
+  Serial.print("受信データ: ?HEX");
+  Serial.println(hexData);
+}
 
 
-void brightnessSet() {
+
+void brightnessSet() {  // ディスプレイの輝度設定
+                        // ボタンA（ピン20）が押された場合
   if (digitalRead(BUTTON_A) == LOW) {
-    if (displayCleared) {      // ディスプレイが消去されている場合
-      displayCleared = false;  // フラグをリセット
-      if (rxStr != "") {
-        displayReceivedData(rxStr);  // 復元するためにrxStrを使用して表示を更新
-      }
-    } else {
-      brightness++;
-      if (brightness > 7) {
-        brightness = 0;
-      }
-
-      tm.brightness(brightness);
-
-      Serial.print("ボタンAが押されました。輝度が変更されました: ");
-      Serial.println(brightness);
+    brightness++;
+    if (brightness > 7) {
+      brightness = 0;
     }
+    tm.brightness(brightness);
 
-    delay(200);  // ボタン入力のデバウンス
+    Serial.print("ボタンAが押されました。輝度: ");
+    Serial.println(brightness);
+
+    delay(200); // ボタン入力のデバウンス
   }
 
   // ボタンB（ピン19）が押された場合
   if (digitalRead(BUTTON_B) == LOW) {
-    tm.reset();  // 7セグメントディスプレイを消去
-    Serial.println("ボタンBが押されました。7セグメントディスプレイを消去しました。");
-    displayCleared = true;  // ディスプレイが消去されたことを示すフラグを設定
-    delay(200);             // ボタン入力のデバウンス
+    if (displayCleared) {
+      Serial.println("復帰");
+      tm.display7Seg(0, 0xFF);
+      tm.display7Seg(1, 0xFF);
+      tm.display7Seg(2, 0xFF);
+      tm.display7Seg(3, 0xFF);
+      tm.display7Seg(4, 0xFF);
+      tm.display7Seg(5, 0xFF);
+      tm.display7Seg(6, 0xFF);
+      tm.display7Seg(7, 0xFF);
+      displayCleared = false;
+    } else {
+      tm.reset();  // 7セグメントディスプレイを消去
+      displayCleared = true;
+      Serial.println("ボタンBが押されました。7セグメントディスプレイを消去しました。");
+    }
+    delay(200);  // ボタン入力のデバウンス
   }
 }
+
+
+/*
+ tm.display7Seg(0, 0xFF);
+      tm.display7Seg(1, 0xFF);
+      tm.display7Seg(2, 0xFF);
+      tm.display7Seg(3, 0xFF);
+      tm.display7Seg(4, 0xFF);
+      tm.display7Seg(5, 0xFF);
+      tm.display7Seg(6, 0xFF);
+      tm.display7Seg(7, 0xFF);
+      */
 
 void changeEOLIndexOnButtonDPress() {
   //ボタンDを押すたびに改行文字を変える
@@ -281,9 +321,16 @@ void changeEOLIndexOnButtonDPress() {
 }
 
 void setTest1() {
-  // Test 1  Brightness and reset
-  tm.displayText("88888888");
-  delay(3000);
+  // 7セグメントディスプレイに文字列を表示
+  tm.display7Seg(0, 0xFF);
+  tm.display7Seg(1, 0xFF);
+  tm.display7Seg(2, 0xFF);
+  tm.display7Seg(3, 0xFF);
+  tm.display7Seg(4, 0xFF);
+  tm.display7Seg(5, 0xFF);
+  tm.display7Seg(6, 0xFF);
+  tm.display7Seg(7, 0xFF);
+  delay(2500);
   rxStr = "V---_bto";
   displayReceivedData(rxStr);
   delay(3000);
