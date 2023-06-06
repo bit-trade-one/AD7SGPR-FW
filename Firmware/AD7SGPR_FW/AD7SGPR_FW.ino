@@ -2,7 +2,8 @@
 //発売時のVendorID:0x22EA
 //発売時のProductID:-
 
-#include <TM1638plus.h>
+//#include <TM1638plus.h>//カソードコモン
+#include <TM1638plus_Model2.h>//アノードコモン
 #include <EEPROM.h>
 
 // GPIO I/O pins on the Arduino connected to strobe, clock, data,
