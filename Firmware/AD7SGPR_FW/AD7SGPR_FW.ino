@@ -1,4 +1,4 @@
-//bto_ODA_230426V0.821
+//bto_ODA_230606V0.91
 //発売時のVendorID:0x22EA
 //発売時のProductID:-
 
@@ -11,6 +11,7 @@
 const int STROBE_TM = 10;  // strobe = GPIO connected to strobe line of module
 const int CLOCK_TM = 9;    // clock = GPIO connected to clock line of module
 const int DIO_TM = 8;      // data = GPIO connected to data line of module
+bool swap_nibbles = false; //Default is false if left out, see note in readme at URL
 bool high_freq = true;     //default false,, If using a high freq CPU > ~100 MHZ set to true.
 
 // ボタン用のピンを定義
@@ -25,14 +26,13 @@ const int EEPROM_DISPLAY_ADDRESS = 1;
 
 
 //Constructor object (GPIO STB , GPIO CLOCK , GPIO DIO, use high freq MCU)
-TM1638plus tm(STROBE_TM, CLOCK_TM, DIO_TM, high_freq);
+TM1638plus_Model2 tm(STROBE_TM, CLOCK_TM, DIO_TM, swap_nibbles, high_freq);
 
 // 輝度設定変数
-//byte brightness = 5;
-uint8_t brightness = 5;
+uint8_t brightness = 5; // 初期値は5 0-7で消灯は無い
 
 const char END_OF_LINE_CHARACTER[][3] = { { "\r\n" }, { "\r" }, { "\n" } };
-int eol_index = 0;  //0 :  \r\n （CRLF、Windows の場合）1 : \r （CR、古いmacOS の場合） 2 :  \n （LF、Unix/Linux/macOS)
+int eol_index = 0;  // 改行文字設定 0 :  \r\n 1 : \r  2 :  \n 
 String rxStr = "";  // 受信した文字列を格納するための変数を宣言します。
 
 bool displayCleared = false;  // ディスプレイが消去されたかどうかを示すフラグを追加
@@ -41,39 +41,32 @@ bool Bstate = false;
 bool BlastState = false;
 
 
-
 void setup() {
   //Serialinit();
   tm.displayBegin();
-  tm.brightness(brightness);
-
-
-
+  
   pinMode(BUTTON_A, INPUT_PULLUP);
   pinMode(BUTTON_B, INPUT_PULLUP);
   pinMode(BUTTON_C, INPUT_PULLUP);
   pinMode(BUTTON_D, INPUT_PULLUP);
 
   // Serial通信の初期化
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(1000);
   pinMode(25, OUTPUT);
-  digitalWrite(25, HIGH);
+  digitalWrite(25, HIGH); // 裏面LED点灯
 
-
-  setTest1();  // Brightness
+  startLighting();  // 起動時の点灯処理
+  tm.brightness(brightness);
   Serial.println("start");
-  Serial.print("輝度: ");
+  Serial.print("brightness: ");
   Serial.println(brightness);
 }
 
 void loop() {
-  readSerialData();
-  brightnessSet();
-  changeEOLIndexOnButtonDPress();
-  // uint8_t value = 0b01000010;  // セグメントaとcに対応するバイト値
-  // tm.displayBegin();
-  // tm.display7Seg(0, value);
+  readSerialData();// 読み出しシリアルデータ
+  brightnessSet();// ディスプレイの輝度設定
+  //changeEOLIndexOnButtonDPress();
 
   delay(100);
 }
@@ -150,7 +143,7 @@ void displayReceivedData(const String& data) {
   tm.reset();
 
   // 右詰めの文字列を表示
-  tm.displayText(rightAlignedString.c_str());
+  tm.DisplayStr(rightAlignedString.c_str());
    displayCleared = false;
 }
 
@@ -181,7 +174,7 @@ bool processSegmentControlCommand(const String& command) {
 
     if (ch >= '1' && ch <= '8') {  // アスキー文字が数字の場合
       if (position != -1) {        // 前の桁がある場合、その桁にセグメント値を表示
-        tm.display7Seg(position, value);
+        tm.DisplaySegments(position, value);
       }
       position = (8 - (ch - '0'));  // 桁の値を反転させる（1->7, 2->6, 3->5, ..., 8->0）
       value = 0;                    // セグメント値をリセット
@@ -218,7 +211,7 @@ bool processSegmentControlCommand(const String& command) {
   }
 
   if (position != -1) {
-    tm.display7Seg(position, value);
+    tm.DisplaySegments(position, value);
   }
 
   return true;
@@ -235,7 +228,7 @@ void displayHexPattern(const String &hexData) {
   for (int i = 0; i < 8; i++) {
     String hexPair = hexData.substring(i * 2, i * 2 + 2);
     uint8_t hexValue = (uint8_t)strtol(hexPair.c_str(), NULL, 16);
-    tm.display7Seg(i, hexValue);
+    tm.DisplaySegments(i, hexValue);
   }
 
   // 正常に出力された際のシリアルモニタへのログ出力
@@ -264,14 +257,14 @@ void brightnessSet() {  // ディスプレイの輝度設定
   if (digitalRead(BUTTON_B) == LOW) {
     if (displayCleared) {
       Serial.println("復帰");
-      tm.display7Seg(0, 0xFF);
-      tm.display7Seg(1, 0xFF);
-      tm.display7Seg(2, 0xFF);
-      tm.display7Seg(3, 0xFF);
-      tm.display7Seg(4, 0xFF);
-      tm.display7Seg(5, 0xFF);
-      tm.display7Seg(6, 0xFF);
-      tm.display7Seg(7, 0xFF);
+      tm.DisplaySegments(0, 0xFF);
+      tm.DisplaySegments(1, 0xFF);
+      tm.DisplaySegments(2, 0xFF);
+      tm.DisplaySegments(3, 0xFF);
+      tm.DisplaySegments(4, 0xFF);
+      tm.DisplaySegments(5, 0xFF);
+      tm.DisplaySegments(6, 0xFF);
+      tm.DisplaySegments(7, 0xFF);
       displayCleared = false;
     } else {
       tm.reset();  // 7セグメントディスプレイを消去
@@ -284,16 +277,17 @@ void brightnessSet() {  // ディスプレイの輝度設定
 
 
 /*
- tm.display7Seg(0, 0xFF);
-      tm.display7Seg(1, 0xFF);
-      tm.display7Seg(2, 0xFF);
-      tm.display7Seg(3, 0xFF);
-      tm.display7Seg(4, 0xFF);
-      tm.display7Seg(5, 0xFF);
-      tm.display7Seg(6, 0xFF);
-      tm.display7Seg(7, 0xFF);
+ tm.DisplaySegments(0, 0xFF);
+      tm.DisplaySegments(1, 0xFF);
+      tm.DisplaySegments(2, 0xFF);
+      tm.DisplaySegments(3, 0xFF);
+      tm.DisplaySegments(4, 0xFF);
+      tm.DisplaySegments(5, 0xFF);
+      tm.DisplaySegments(6, 0xFF);
+      tm.DisplaySegments(7, 0xFF);
       */
 
+/*バグが懸念されるため 無効化
 void changeEOLIndexOnButtonDPress() {
   //ボタンDを押すたびに改行文字を変える
   if (digitalRead(BUTTON_D) == LOW) {
@@ -319,21 +313,30 @@ void changeEOLIndexOnButtonDPress() {
     Serial.println(eolString);
     delay(200);  // ボタン入力のデバウンス
   }
-}
+} */
 
-void setTest1() {
-  // 7セグメントディスプレイに文字列を表示
-  tm.display7Seg(0, 0xFF);
-  tm.display7Seg(1, 0xFF);
-  tm.display7Seg(2, 0xFF);
-  tm.display7Seg(3, 0xFF);
-  tm.display7Seg(4, 0xFF);
-  tm.display7Seg(5, 0xFF);
-  tm.display7Seg(6, 0xFF);
-  tm.display7Seg(7, 0xFF);
-  delay(2500);
-  rxStr = "V---_bto";
+void startLighting() {
+  rxStr = "AD7SGPR";
   displayReceivedData(rxStr);
-  delay(3000);
+  delay(2500);
+  handleReceivedData(rxStr);
+  // 7セグメントディスプレイに文字列を表示
+  tm.DisplaySegments(0, 0xFF);
+  tm.DisplaySegments(1, 0xFF);
+  tm.DisplaySegments(2, 0xFF);
+  tm.DisplaySegments(3, 0xFF);
+  tm.DisplaySegments(4, 0xFF);
+  tm.DisplaySegments(5, 0xFF);
+  tm.DisplaySegments(6, 0xFF);
+  tm.DisplaySegments(7, 0xFF);
+  for(int i = 0; i < 8; i++){
+    tm.brightness(i);
+    delay(100);
+  }
+  delay(1000);
+  handleReceivedData(rxStr);
+  rxStr = "V001_bto";
+  displayReceivedData(rxStr);
+  delay(1000);
   handleReceivedData(rxStr);
 }
