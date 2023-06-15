@@ -53,8 +53,7 @@ void setup() {
 
   startLighting();  // 起動時の点灯処理
   tm.brightness(brightness);
-  while (!Serial)
-    ;  // シリアルが開くのを待つ
+ // while (!Serial);  // シリアルが開くのを待つ
   Serial.println("start");
   Serial.print("brightness: ");
   Serial.println(brightness);
