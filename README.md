@@ -1,5 +1,5 @@
 # AD7SGPR-FW
-tm1638-library使用し、AD7SGPRのFWを作成。
+tm1638-library使用し、AD7SGPRのFWを作成。  
 AD7SGPRはアノードコモンの7セグを使用。
 
 # Licence
