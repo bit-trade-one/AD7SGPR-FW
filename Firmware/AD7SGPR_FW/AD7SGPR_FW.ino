@@ -1,6 +1,5 @@
-//bto_ODA_230613V2.1
+//bto_ODA_230620V2.2公開用
 #include <TM1638plus_Model2.h>
-#include <EEPROM.h>
 
 const int STROBE_TM = 10;
 const int CLOCK_TM = 9;
@@ -53,7 +52,7 @@ void setup() {
 
   startLighting();  // 起動時の点灯処理
   tm.brightness(brightness);
- // while (!Serial);  // シリアルが開くのを待つ
+  // while (!Serial);  // シリアルが開くのを待つ
   Serial.println("start");
   Serial.print("brightness: ");
   Serial.println(brightness);
@@ -64,8 +63,10 @@ void loop() {
 
   brightnessSetAPress();  // ディスプレイの輝度設定
   printModeDisplayButtonBPress();
-  toggleAnimationOnButtonCPress();  // ボタンCを押したときにアニメーションを切り替える
-  ffButtonDPress();
+  //toggleAnimationOnButtonCPress();  // ボタンCを押したときにアニメーションを切り替える
+  ButtonCPress();  // ボタンCを押したときにアニメーションを切り替える
+  //ffButtonDPress();
+  ButtonDPress();
 
   delay(1);
 }
@@ -212,7 +213,7 @@ void brightnessSetAPress() {  // ディスプレイの輝度設定
     Serial.print("brightness:");
     Serial.println(brightness);
 
-    delay(200);  // ボタン入力のデバウンス
+    delay(100);  // ボタン入力のデバウンス
   }
 }
 
@@ -232,7 +233,7 @@ void printModeDisplayButtonBPress() {  // ボタンB（ピン19）が押され�
       tm.reset();  // 7セグメントディスプレイを消去
       displayOff = true;
     }
-    delay(200);  // ボタン入力のデバウンス
+    delay(100);  // ボタン入力のデバウンス
   }
 }
 
@@ -275,54 +276,22 @@ void brightnessReturnCommand() {  // 輝度を返す
   Serial.println(brightness);
 }
 
-void toggleAnimationOnButtonCPress() {
+void ButtonCPress() {
   if (digitalRead(BUTTON_C) == LOW) {
-    static int pressCount = 1;  // ボタンが押された回数を数える変数(1回目の押し込みでANI1にしたいので1で初期化)
+
     Serial.println("pushC");
-    pressCount = (pressCount % 3) + 1;
-
-    if (pressCount == 1) {
-      animationFlag = false;
-      animationType = 0;
-      tm.DisplayStr("noANI");
-    } else if (pressCount == 2) {
-      animationFlag = true;
-      animationType = 1;
-      tm.DisplayStr("ANI1");
-    } else if (pressCount == 3) {
-      animationFlag = true;
-      animationType = 2;
-      tm.DisplayStr("ANI2");
-    }
-
-    Serial.print("animationFlag: ");
-    Serial.print(animationFlag);
-    Serial.print(", animationType: ");
-    Serial.println(animationType);
-
-    delay(500);  // ボタン入力のデバウンス
-    tm.reset();
+    delay(100);  // ボタン入力のデバウンス
   }
 }
 
-void ffButtonDPress() {
+void ButtonDPress() {
   if (digitalRead(BUTTON_D) == LOW) {
     Serial.println("pushD");
-    if (displayOff == false) {  //7セグ消灯フラグをチェック
-      tm.DisplaySegments(0, 0xFF);
-      tm.DisplaySegments(1, 0xFF);
-      tm.DisplaySegments(2, 0xFF);
-      tm.DisplaySegments(3, 0xFF);
-      tm.DisplaySegments(4, 0xFF);
-      tm.DisplaySegments(5, 0xFF);
-      tm.DisplaySegments(6, 0xFF);
-      tm.DisplaySegments(7, 0xFF);
-    } else {
-      Serial.println(">>>>> During display off mode <<<<<");  //消灯モード中
-    }
+    delay(100);
   }
-  delay(200);
 }
+
+
 
 void displayAnimationCommand(const String& animationData) {
   int command = animationData.toInt();
@@ -455,7 +424,7 @@ void startLighting() {
   tm.DisplayStr(setupRxStr.c_str(), 0);
   delay(1000);
   tm.reset();
-  setupRxStr = "V021_bto";
+  setupRxStr = "V022_bto";
   tm.DisplayStr(setupRxStr.c_str(), 0x20);
   delay(1000);
   tm.reset();
