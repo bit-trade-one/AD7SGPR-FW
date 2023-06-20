@@ -1,7 +1,7 @@
 # AD7SGPR-FW
 TM1638plusライブラリを使用し、AD7SGPRのFWを作成。  
 AD7SGPRはアノードコモンの7セグを使用。  
-ハードウェア情報等は[ハードリポジトリへ](https://github.com/bit-trade-one/AD7SGPR)へ
+ハードウェア情報等は[ハードリポジトリへ](https://github.com/bit-trade-one/AD7SGPR)
 
 ## 開発環境
 ArduinoIDE2.0・VScodeで開発。  
