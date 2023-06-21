@@ -213,7 +213,7 @@ void brightnessSetAPress() {  // ディスプレイの輝度設定
     Serial.print("brightness:");
     Serial.println(brightness);
 
-    delay(100);  // ボタン入力のデバウンス
+    delay(200);  // ボタン入力のデバウンス
   }
 }
 
@@ -233,7 +233,7 @@ void printModeDisplayButtonBPress() {  // ボタンB（ピン19）が押され�
       tm.reset();  // 7セグメントディスプレイを消去
       displayOff = true;
     }
-    delay(100);  // ボタン入力のデバウンス
+    delay(200);  // ボタン入力のデバウンス
   }
 }
 
@@ -280,14 +280,14 @@ void ButtonCPress() {
   if (digitalRead(BUTTON_C) == LOW) {
 
     Serial.println("pushC");
-    delay(100);  // ボタン入力のデバウンス
+    delay(200);  // ボタン入力のデバウンス
   }
 }
 
 void ButtonDPress() {
   if (digitalRead(BUTTON_D) == LOW) {
     Serial.println("pushD");
-    delay(100);
+    delay(200); // ボタン入力のデバウンス
   }
 }
 
