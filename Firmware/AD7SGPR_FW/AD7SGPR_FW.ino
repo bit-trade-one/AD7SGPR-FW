@@ -1,4 +1,4 @@
-//bto_ODA_230620V2.2公開用
+//bto_ODA_230621V2.21公開直前用
 #include <TM1638plus_Model2.h>
 
 const int STROBE_TM = 10;
@@ -30,7 +30,8 @@ uint8_t brightness = 5;  // 初期値は5 0-7で消灯は無い
 
 const char END_OF_LINE_CHARACTER[][3] = { { "\r\n" }, { "\r" }, { "\n" } };
 const int eol_index = 0;  // 改行文字設定 0 :  \r\n 1 : \r  2 :  \n
-String rxStr = "";        // 受信した文字列を格納するための変数
+
+String rxStr = "";  // 受信した文字列を格納するための変数
 
 bool displayOff = false;  // ディスプレイが消去されたかどうかを示すフラグ
 
@@ -117,6 +118,10 @@ void readSerialDataPrint() {
         Serial.println(buffer);
         Serial.println("E0:Over receive length");  //エラー：受信文字が20文字未満ではない
         buffer = "";
+        while (Serial.available() > 0) {
+          Serial.read();
+        }
+        break;  // 追加
       }
     }
   }
@@ -287,7 +292,7 @@ void ButtonCPress() {
 void ButtonDPress() {
   if (digitalRead(BUTTON_D) == LOW) {
     Serial.println("pushD");
-    delay(200); // ボタン入力のデバウンス
+    delay(200);  // ボタン入力のデバウンス
   }
 }
 
