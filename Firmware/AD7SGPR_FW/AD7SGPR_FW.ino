@@ -1,4 +1,4 @@
-//bto_ODA_230621V2.21公開直前用
+//bto_ODA_230623V2.3公開用
 #include <TM1638plus_Model2.h>
 
 const int STROBE_TM = 10;
@@ -35,7 +35,30 @@ String rxStr = "";  // 受信した文字列を格納するための変数
 
 bool displayOff = false;  // ディスプレイが消去されたかどうかを示すフラグ
 
+bool Bstate = false;
+bool BlastState = false;
 
+uint16_t statusButtonA = 0;
+uint16_t statusButtonB = 0;
+uint16_t statusButtonC = 0;
+uint16_t statusButtonD = 0;
+
+// 割込みハンドラ定義
+void onButtonA() {
+  statusButtonA = 1;
+}
+
+void onButtonB() {
+  statusButtonB = 1;
+}
+
+void onButtonC() {
+  statusButtonC = 1;
+}
+
+void onButtonD() {
+  statusButtonD = 1;
+}
 
 void setup() {
   tm.displayBegin();
@@ -45,13 +68,19 @@ void setup() {
   pinMode(BUTTON_C, INPUT_PULLUP);
   pinMode(BUTTON_D, INPUT_PULLUP);
 
+  // 割り込みハンドラ設定
+  attachInterrupt(BUTTON_A, onButtonA, RISING);
+  attachInterrupt(BUTTON_B, onButtonB, RISING);
+  attachInterrupt(BUTTON_C, onButtonC, RISING);
+  attachInterrupt(BUTTON_D, onButtonD, RISING);
+
   // Serial通信の初期化
   Serial.begin(115200);
 
   pinMode(ad7sgprLED, OUTPUT);
-  analogWrite(ad7sgprLED, 64);  // 裏面LED暗めに点灯
+  analogWrite(ad7sgprLED, 128);  // 裏面LED点灯
 
-  startLighting();  // 起動時の点灯処理
+  startLighting();  // 起動時の点灯シーケンス
   tm.brightness(brightness);
   // while (!Serial);  // シリアルが開くのを待つ
   Serial.println("start");
@@ -61,12 +90,9 @@ void setup() {
 
 void loop() {
   readSerialDataPrint();  // 読み出しシリアルデータ
-
   brightnessSetAPress();  // ディスプレイの輝度設定
   printModeDisplayButtonBPress();
-  //toggleAnimationOnButtonCPress();  // ボタンCを押したときにアニメーションを切り替える
-  ButtonCPress();  // ボタンCを押したときにアニメーションを切り替える
-  //ffButtonDPress();
+  ButtonCPress();
   ButtonDPress();
 
   delay(1);
@@ -80,27 +106,27 @@ bool isEndOfLine(char ch) {  //改行文字
 void readSerialDataPrint() {
   // 読み出しシリアルデータ
   static String buffer = "";
-
+  char ch;
   // シリアルバッファにデータがある場合
   while (Serial.available() > 0) {
-    char ch = Serial.read();
+    ch = Serial.read();
     if (isEndOfLine(ch)) {
       if (buffer.length() > 0) {
         String rxStr = buffer;
         buffer = "";
         // 各種処理関数呼び出し
         if (rxStr == "@CLR") {
-          displayClearCommand(rxStr);
+          displayClearCommand();
         } else if (rxStr.startsWith("@ANI")) {
-          displayAnimationCommand(rxStr.substring(4));  // コマンドアニメ設定関数
+          displayAnimationCommand(rxStr.substring(4));
         } else if (rxStr.startsWith("@7SG")) {
-          printModeDisplayCommand(rxStr.substring(4));  // コマンドアニメ設定関数
+          printModeDisplayCommand(rxStr.substring(4));
         } else if (rxStr.startsWith("@BRI")) {
           brightnessSetCommand(rxStr.substring(4));  // コマンド輝度設定関数
         } else if (rxStr.startsWith("@BRR")) {
           brightnessReturnCommand();  // コマンド輝度確認関数
         } else if (rxStr.startsWith("@HEX")) {
-          if (animationFlag == true && displayOff == false) {  //7セグ表示の前にアニメを再生するか否か
+          if (animationFlag == true && displayOff == false) {  //7セグ表示の前にアニメを再生するか否か(トランジションの有無)
             displayAnimation();
           }
           displayHexPattern(rxStr.substring(4));  // コマンドHEX表示関数
@@ -119,66 +145,69 @@ void readSerialDataPrint() {
         Serial.println("E0:Over receive length");  //エラー：受信文字が20文字未満ではない
         buffer = "";
         while (Serial.available() > 0) {
-          Serial.read();
+          ch = Serial.read();
+          if (isEndOfLine(ch)) {
+            break;
+          }
         }
-        break;  // 追加
+        break;
       }
     }
   }
 }
 
-
 void displayReceivedData(const String& data) {
-  // 受信データを表示
+  //受信データ表示
   Serial.print("rxData:");
   Serial.println(data);
 
   // 表示する文字列とドットの位置を格納する変数を初期化
-  String displayString = "";
+  char displayChars[9] = "        ";
   uint16_t dotPositions = 0;
   int segmentCount = 0;
-  int dotCount = 0;
+  int displayIndex = 7;
 
-  // 文字列を一文字ずつ走査
-  for (int i = 0; i < data.length(); i++) {
-    if (data.charAt(i) == '.') {
-      // 文字がドットであれば、それをドットの位置として記録
-      // segmentCountは現在の文字の位置を示し、ドット位置のビットマスクを作成
-      dotCount++;
-      if (dotCount > 1) {
-        Serial.println("E1: Multiple dots");  //エラー：ピリオドが複数存在
-        return;
+  // ドットが含まれているかどうかチェック
+  if (data.indexOf('.') != -1) {  // ドットがある場合の処理
+    bool dotFound = false;
+    for (int i = data.length() - 1; i >= 0; i--) {
+      char c = data[i];  // Stringの文字を直接取得
+
+      // ドットが複数個合った場合はエラーを返す
+      if (c == '.') {
+        if (dotFound) {
+          Serial.println("E1: Multiple dots");
+          return;
+        }
+        dotFound = true;
+        dotPositions |= (1 << (7 - displayIndex));
+      } else {
+        // 文字がドットでなければ、その文字を表示文字列に追加
+        displayChars[displayIndex--] = c;
+        segmentCount++;
       }
-      if (i > 0) dotPositions |= (1 << (7 - segmentCount + 1));
-    } else {
-      // 文字がドットでなければ、その文字を表示文字列に追加
-      displayString += data.charAt(i);
-      segmentCount++;
+    }
+  } else {  // ドットがない場合の処理
+    for (int i = data.length() - 1; i >= 0; i--) {
+      displayChars[displayIndex--] = data[i];  // Stringの文字を直接取得
     }
   }
 
   // 文字数が8文字より多い場合はエラーを返す
   if (segmentCount > 8) {
-    Serial.println("E2: Over 8 length");  //エラー：7セグ桁(8)以上の入力有り
+    Serial.println("E2: Over 8 length");
     return;
   }
 
-  // 7セグメント表示が8桁なので、それに足りない部分をスペースで埋める
-  // ドットの位置も同時に右にずらす（スペース分）
-  while (displayString.length() < 8) {
-    displayString = " " + displayString;
-    if (dotPositions > 0) dotPositions >>= 1;
-  }
-
   // 文字列を表示し、ドットの位置も指定
-  if (displayOff == false) {  //7セグ消灯フラグをチェック
-    tm.DisplayStr(displayString.c_str(), dotPositions);
+  if (!displayOff) {
+    tm.DisplayStr(displayChars, dotPositions);
   } else {
-    Serial.println(">>>>> During display off mode <<<<<");  //消灯モード中
+    Serial.println(">>>>> During display off mode <<<<<");
   }
 }
 
-void displayClearCommand(const String& data) {
+void displayClearCommand() {
   // 受信データが "@CLR" の場合、画面クリア処理を実行
   tm.reset();
   Serial.println("rxData:@CLR Display clear");
@@ -194,10 +223,10 @@ void displayHexPattern(const String& hexData) {
   Serial.print("rxData:@HEX");
   Serial.println(hexData);
 
-  int len = hexData.length() / 2;
-  byte* byteData = new byte[len];
-  for (int i = 0; i < len; i++) {
-    byteData[i] = strtol(hexData.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
+  byte byteData[8];
+  for (int i = 0; i < 8; i++) {
+    char buf[3] = { hexData[i * 2], hexData[i * 2 + 1], 0 };  // Stringの文字を直接取得
+    byteData[i] = strtol(buf, NULL, 16);
   }
   if (displayOff == false) {  //7セグ消灯フラグをチェック
     tm.ASCIItoSegment(byteData);
@@ -206,9 +235,10 @@ void displayHexPattern(const String& hexData) {
   }
 }
 
+
 void brightnessSetAPress() {  // ディスプレイの輝度設定
   // ボタンA（ピン20）が押された場合
-  if (digitalRead(BUTTON_A) == LOW) {
+  if (statusButtonA == 1) {  // 割込みハンドラ内のフラグを参照に変更
     brightness++;
     if (brightness > 7) {
       brightness = 0;
@@ -218,27 +248,26 @@ void brightnessSetAPress() {  // ディスプレイの輝度設定
     Serial.print("brightness:");
     Serial.println(brightness);
 
-    delay(200);  // ボタン入力のデバウンス
+    statusButtonA = 0;  // フラグクリア
   }
 }
 
-void printModeDisplayButtonBPress() {  // ボタンB（ピン19）が押された場合の処理
-  if (digitalRead(BUTTON_B) == LOW) {
+void printModeDisplayButtonBPress() {
+  // ボタンB（ピン19）が押された場合の処理
+  if (statusButtonB == 1) {  // 割込みハンドラ内のフラグを参照に変更
     Serial.println("pushB");
     if (displayOff == true) {
       Serial.println("7SGon");
-      tm.DisplayStr("7SGon", 0);
-      delay(1000);
-      tm.reset();
+      analogWrite(ad7sgprLED, 128);  // 裏面LED点灯
       displayOff = false;
     } else {
       Serial.println("7SGoff");
-      tm.DisplayStr("7SGoff", 0);
-      delay(1000);
-      tm.reset();  // 7セグメントディスプレイを消去
+      tm.reset();                  // 7セグメントディスプレイを消去
+      analogWrite(ad7sgprLED, 8);  // 裏面LED点灯暗め
       displayOff = true;
     }
-    delay(200);  // ボタン入力のデバウンス
+
+    statusButtonB = 0;  // フラグクリア
   }
 }
 
@@ -246,20 +275,20 @@ void printModeDisplayCommand(const String& printModeDisplayData) {
   int command = printModeDisplayData.toInt();
 
   switch (command) {
-    case 1:
-      Serial.println("@7SG1:7SGon");
-      tm.DisplayStr("7SGon");
-      delay(1000);
+
+    case 0:
+      Serial.println("rxData:@7SG0");
+      Serial.println("7sgOff");
       tm.reset();
-      displayOff = false;  //Displayはオフじゃないにセット
+      analogWrite(ad7sgprLED, 8);  // 裏面LED点灯暗め
+      displayOff = true;           // 7セグメントディスプレイ消灯フラグを立てる
       break;
 
     default:
-      Serial.println("@7SG0:7SGoff");
-      tm.DisplayStr("7SGoff");
-      delay(1000);
-      tm.reset();
-      displayOff = true;  //Displayはオフにセット
+      Serial.println("rxData:@7SG1");
+      Serial.println("7sgOn");
+      analogWrite(ad7sgprLED, 128);  // 裏面LED点灯
+      displayOff = false;            // 7セグメントディスプレイ消灯フラグを解除
       break;
   }
 }
@@ -272,49 +301,54 @@ void brightnessSetCommand(const String& brightnessData) {
   }
   brightness = brightnessInt;
   tm.brightness(brightnessInt);
+  Serial.print("rxData:@BRI");
+  Serial.println(brightnessInt);
   Serial.print("brightness: ");
   Serial.println(brightnessInt);
 }
 
 void brightnessReturnCommand() {  // 輝度を返す
+  Serial.println("rxData:@BRR");
   Serial.print("brightness: ");
   Serial.println(brightness);
 }
 
 void ButtonCPress() {
-  if (digitalRead(BUTTON_C) == LOW) {
+  //割込みハンドラ内のフラグを参照に変更
+  if (statusButtonC == 1) {
 
     Serial.println("pushC");
-    delay(200);  // ボタン入力のデバウンス
+    statusButtonC = 0;  // フラグクリア
   }
 }
 
 void ButtonDPress() {
-  if (digitalRead(BUTTON_D) == LOW) {
+  // 割込みハンドラ内のフラグを参照に変更
+  if (statusButtonD == 1) {
     Serial.println("pushD");
-    delay(200);  // ボタン入力のデバウンス
+    statusButtonD = 0;  //チャタリング収束後、フラグクリア
   }
 }
 
-
-
 void displayAnimationCommand(const String& animationData) {
   int command = animationData.toInt();
-
   switch (command) {
     case 1:
       animationFlag = true;
       animationType = 1;
+      Serial.println("rxData:@ANI1");
       Serial.println("Animation1");
       break;
     case 2:
       animationFlag = true;
       animationType = 2;
+      Serial.println("rxData:@ANI2");
       Serial.println("Animation2");
       break;
     default:
       animationFlag = false;
       animationType = 0;
+      Serial.println("rxData:@ANI0");
       Serial.println("No animation");
       break;
   }
@@ -429,7 +463,7 @@ void startLighting() {
   tm.DisplayStr(setupRxStr.c_str(), 0);
   delay(1000);
   tm.reset();
-  setupRxStr = "V022_bto";
+  setupRxStr = "V023_bto";
   tm.DisplayStr(setupRxStr.c_str(), 0x20);
   delay(1000);
   tm.reset();
