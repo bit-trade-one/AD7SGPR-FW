@@ -208,13 +208,15 @@ void displayClearCommand() {
 
 void displayHexPattern(const String& hexData) {
   //HEX固定長の表示
-  if (hexData.length() != 16) {
-    Serial.println("E3: Need 16 hex digits");  //エラー：16桁の16進数が必要
-    return;
-  }
+
   //シリアルモニタへのログ出力
   Serial.print("rxData:@HEX");
   Serial.println(hexData);
+
+    if (hexData.length() != 16) {
+    Serial.println("E3: Need 16 hex digits");  //エラー：16桁の16進数が必要
+    return;
+  }
 
   byte byteData[8];
   for (int i = 0; i < 8; i++) {
