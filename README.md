@@ -1,5 +1,5 @@
 # AD7SGPR-FW
-TM1638plusライブラリを使用し、AD7SGPRのFWを作成。  
+TM1638plusライブラリを使用し、AD7SGPRのFWを作成  
 AD7SGPRはアノードコモンの7セグを使用。  
 ハードウェア情報等は[ハードリポジトリへ](https://github.com/bit-trade-one/AD7SGPR)
 
