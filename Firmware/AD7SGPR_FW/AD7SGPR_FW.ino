@@ -184,19 +184,12 @@ void displayReceivedData(const String& data) {
       } else {
         // 文字がドットでなければ、その文字を表示文字列に追加
         displayChars[displayIndex--] = c;
-        segmentCount++;
       }
     }
   } else {  // ドットがない場合の処理
     for (int i = data.length() - 1; i >= 0; i--) {
       displayChars[displayIndex--] = data[i];  // Stringの文字を直接取得
     }
-  }
-
-  // 文字数が8文字より多い場合はエラーを返す
-  if (segmentCount > 8) {
-    Serial.println("E2: Over 8 length");
-    return;
   }
 
   // 文字列を表示し、ドットの位置も指定
