@@ -1,11 +1,12 @@
-// bto_ODA_230623V2.3公開用
+// bto_ODA_230628V2.5
 #include <TM1638plus_Model2.h>
+#include <EEPROM.h>
 
 const int STROBE_TM = 10;
 const int CLOCK_TM = 9;
 const int DIO_TM = 8;
 const bool swap_nibbles = false;
-const bool high_freq = true; // default false,, If using a high freq CPU > ~100 MHZ set to true.
+const bool high_freq = true; // If using a high freq CPU > ~100 MHZ set to true.
 
 // ピンを定義
 const int BUTTON_A = 20;
@@ -16,33 +17,38 @@ const int BUTTON_D = 17;
 const int ad7sgprLED = 25; // 裏面のLED
 
 // displayAnimation用の変数
-int currentIndex = 0;
 int animationType = 0;
 
-// アニメフラグを定義
+// アニメーションフラグ
 bool animationFlag = false;
 
+// TM1638モジュールのインスタンス化
 TM1638plus_Model2 tm(STROBE_TM, CLOCK_TM, DIO_TM, swap_nibbles, high_freq);
 
 // 輝度設定変数
-uint8_t brightness = 5; // 初期値は5 0-7で消灯は無い
+const uint8_t InitialBrightness = 4; // 初期輝度設定
+uint8_t brightness;                  // 0-7の範囲で設定。消灯はなし
 
+// 改行文字の設定
 const char END_OF_LINE_CHARACTER[][3] = {{"\r\n"}, {"\r"}, {"\n"}};
-const int eol_index = 0; // 改行文字設定 0 :  \r\n 1 : \r  2 :  \n
+const int eol_index = 0; // 改行文字設定 0: "\r\n", 1: "\r", 2: "\n"
 
-String rxStr = ""; // 受信した文字列を格納するための変数
+// 7セグメントディスプレイの点灯モードフラグ
+bool displayOn = true;
 
-bool displayOn = true; // 7セグディスプレイが点灯モードかを示すフラグ
+// EEPROMに保存する輝度設定データのアドレス
+const byte brightnessAddress = 0;
 
-bool Bstate = false;
-bool BlastState = false;
+// EEPROMから読み取った輝度設定を格納する変数
+uint8_t storedBrightness;
 
-uint16_t statusButtonA = 0;
-uint16_t statusButtonB = 0;
-uint16_t statusButtonC = 0;
-uint16_t statusButtonD = 0;
+// ボタンの状態を格納する変数
+volatile uint16_t statusButtonA = 0;
+volatile uint16_t statusButtonB = 0;
+volatile uint16_t statusButtonC = 0;
+volatile uint16_t statusButtonD = 0;
 
-// 割込みハンドラ定義
+// 割り込みハンドラの定義
 void onButtonA()
 {
   statusButtonA = 1;
@@ -66,42 +72,56 @@ void onButtonD()
 void setup()
 {
   tm.displayBegin();
-  // Serial通信の初期化
   Serial.begin(115200);
 
+  // while (!Serial);   // シリアルが開くのを待つ
+  EEPROM.begin(256);
+  storedBrightness = EEPROM.read(brightnessAddress);
+
   pinMode(ad7sgprLED, OUTPUT);
-  analogWrite(ad7sgprLED, 128); // 裏面LED点灯
+  analogWrite(ad7sgprLED, 128);
 
   pinMode(BUTTON_A, INPUT_PULLUP);
   pinMode(BUTTON_B, INPUT_PULLUP);
   pinMode(BUTTON_C, INPUT_PULLUP);
   pinMode(BUTTON_D, INPUT_PULLUP);
 
-  if (digitalRead(BUTTON_A) == LOW && digitalRead(BUTTON_B) == LOW && digitalRead(BUTTON_C) == LOW && digitalRead(BUTTON_D) == LOW)
-  {                  // ABCD同時押し起動でバージョン確認
-    startLighting(); // 起動時の点灯シーケンス
+  // EEPROMから輝度設定を読み出す
+  if (0 <= storedBrightness && storedBrightness <= 7)
+  {
+    tm.brightness(storedBrightness);
+    brightness = storedBrightness;
+  }
+  else
+  {
+    EEPROM.write(brightnessAddress, InitialBrightness); // EEPROMに初期値を書き込む
+    brightness = InitialBrightness;
+    EEPROM.commit(); // 書き込んだデータをFlashに保存する
+    tm.brightness(brightness);
   }
 
+  if (digitalRead(BUTTON_A) == LOW && digitalRead(BUTTON_B) == LOW && digitalRead(BUTTON_C) == LOW && digitalRead(BUTTON_D) == LOW)
+  {                    // ABCD同時押し起動でバージョン確認
+    versionLighting(); // 起動時の点灯シーケンス
+  }
+
+  Serial.println("start");
+  Serial.print("brightness:");
+  Serial.println(brightness);
   // 割り込みハンドラ設定
   attachInterrupt(BUTTON_A, onButtonA, RISING);
   attachInterrupt(BUTTON_B, onButtonB, RISING);
   attachInterrupt(BUTTON_C, onButtonC, RISING);
   attachInterrupt(BUTTON_D, onButtonD, RISING);
-
-  tm.brightness(brightness);
-  // while (!Serial);  // シリアルが開くのを待つ
-  Serial.println("start");
-  Serial.print("brightness: ");
-  Serial.println(brightness);
 }
 
 void loop()
 {
-  readSerialDataPrint(); // 読み出しシリアルデータ
-  brightnessSetAPress(); // ディスプレイの輝度設定
-  printModeDisplayButtonBPress();
-  ButtonCPress();
-  ButtonDPress();
+  readSerialDataPrint();          // 読み出しシリアルデータ出力
+  brightnessSetAPress();          // ボタンAディスプレイの輝度設定
+  printModeDisplayButtonBPress(); // ボタンBディスプレイの点灯モード切り替え
+  ButtonCPress();                 // ボタンC押下時の処理
+  ButtonDPress();                 // ボタンD押下時の処理
 
   delay(1);
 }
@@ -142,19 +162,19 @@ void readSerialDataPrint()
         }
         else if (rxStr.startsWith("@BRI"))
         {
-          brightnessSetCommand(rxStr.substring(4)); // コマンド輝度設定関数
+          brightnessSetCommand(rxStr.substring(4));
         }
         else if (rxStr.startsWith("@BRR"))
         {
-          brightnessReturnCommand(); // コマンド輝度確認関数
+          brightnessReturnCommand();
         }
         else if (rxStr.startsWith("@HEX"))
         {
           if (animationFlag == true && displayOn == true)
-          { // 7セグ表示の前にアニメを再生するか否か(トランジションの有無)
+          {
             displayAnimation();
           }
-          displayHexPattern(rxStr.substring(4)); // コマンドHEX表示関数
+          displayHexPattern(rxStr.substring(4));
         }
         else
         {
@@ -162,7 +182,7 @@ void readSerialDataPrint()
           {
             displayAnimation();
           }
-          displayReceivedData(rxStr); // 受信データを表示
+          displayReceivedData(rxStr);
         }
       }
     }
@@ -209,12 +229,11 @@ void displayReceivedData(const String &data)
     {
       char c = data[i]; // Stringの文字を直接取得
 
-      // ドットが複数個合った場合はエラーを返す
       if (c == '.')
       {
         if (dotFound)
         {
-          Serial.println("E1: Multiple dots");
+          Serial.println("E1: Multiple dots"); // ドットが複数個合った場合はエラーを返す
           return;
         }
         dotFound = true;
@@ -242,7 +261,7 @@ void displayReceivedData(const String &data)
   }
   else
   {
-    Serial.println(">>>>> During display off mode <<<<<");
+    Serial.println(">>>>> During display off mode <<<<<"); // 消灯モード中
   }
 }
 
@@ -256,7 +275,6 @@ void displayClearCommand()
 void displayHexPattern(const String &hexData)
 {
   // HEX固定長の表示
-
   // シリアルモニタへのログ出力
   Serial.print("rxData:@HEX");
   Serial.println(hexData);
@@ -293,6 +311,8 @@ void brightnessSetAPress()
     {
       brightness = 0;
     }
+    EEPROM.write(brightnessAddress, brightness);
+    EEPROM.commit();
     tm.brightness(brightness);
     Serial.println("pushA");
     Serial.print("brightness:");
@@ -345,14 +365,14 @@ void printModeDisplayCommand(const String &printModeDisplayData)
     Serial.println("rxData:@7SG1");
     Serial.println("7sgOn");
     analogWrite(ad7sgprLED, 128); // 裏面LED点灯
-    displayOn = true;           // 7セグメントディスプレイ点灯フラグを立てる
+    displayOn = true;             // 7セグメントディスプレイ点灯フラグを立てる
     break;
 
   default:
     Serial.println("rxData:@7SGx");
     Serial.println("7sgOn");
     analogWrite(ad7sgprLED, 128); // 裏面LED点灯
-    displayOn = true;           // 7セグメントディスプレイ点灯フラグを立てる
+    displayOn = true;             // 7セグメントディスプレイ点灯フラグを立てる
     break;
   }
 }
@@ -367,17 +387,19 @@ void brightnessSetCommand(const String &brightnessData)
     return;
   }
   brightness = brightnessInt;
+  EEPROM.write(brightnessAddress, brightness);
+  EEPROM.commit();
   tm.brightness(brightnessInt);
   Serial.print("rxData:@BRI");
   Serial.println(brightnessInt);
-  Serial.print("brightness: ");
+  Serial.print("brightness:");
   Serial.println(brightnessInt);
 }
 
 void brightnessReturnCommand()
 { // 輝度を返す
   Serial.println("rxData:@BRR");
-  Serial.print("brightness: ");
+  Serial.print("brightness:");
   Serial.println(brightness);
 }
 
@@ -407,6 +429,12 @@ void displayAnimationCommand(const String &animationData)
   int command = animationData.toInt();
   switch (command)
   {
+  case 0:
+    animationFlag = false;
+    animationType = 0;
+    Serial.println("rxData:@ANI0");
+    Serial.println("No animation");
+    break;
   case 1:
     animationFlag = true;
     animationType = 1;
@@ -422,7 +450,7 @@ void displayAnimationCommand(const String &animationData)
   default:
     animationFlag = false;
     animationType = 0;
-    Serial.println("rxData:@ANI0");
+    Serial.println("rxData:@ANIx");
     Serial.println("No animation");
     break;
   }
@@ -432,9 +460,9 @@ void displayAnimation()
 {
   int displayAnimationDelay = 50;
   int displayAnimationloop = 33;
+  int currentIndex = 0;
   if (animationType == 1)
   {
-    // スクロールする数字
     for (int i = 0; i < displayAnimationloop; i++)
     {
       String displayStr;
@@ -470,16 +498,10 @@ void displayAnimation()
       case 9:
         displayStr = "99999999";
         break;
-      case 10:
-        displayStr = "55555555";
-        break;
-      case 11:
-        displayStr = "44444444";
-        break;
       }
       tm.DisplayStr(displayStr.c_str(), 0);
       currentIndex++;
-      if (currentIndex > 11)
+      if (currentIndex > 9)
       {
         currentIndex = 0;
       }
@@ -488,7 +510,6 @@ void displayAnimation()
   }
   else if (animationType == 2)
   {
-    // 点滅するセグメント
     for (int i = 0; i < displayAnimationloop; i++)
     {
       switch (currentIndex)
@@ -528,7 +549,7 @@ void displayAnimation()
   }
 }
 
-void startLighting()
+void versionLighting()
 {
   // 起動時のバージョン確認シーケンス
   tm.DisplaySegments(0, 0xFF);
@@ -542,14 +563,14 @@ void startLighting()
   for (int i = 0; i < 8; i++)
   {
     tm.brightness(i);
-    delay(100);
+    delay(250);
   }
-  delay(3000);
+  delay(1000);
   String setupRxStr = "AD7SGPR";
   tm.DisplayStr(setupRxStr.c_str(), 0);
   delay(1000);
   tm.reset();
-  setupRxStr = "V023_bto";
+  setupRxStr = "V025_bto";
   tm.DisplayStr(setupRxStr.c_str(), 0x20);
   delay(1000);
   tm.reset();
