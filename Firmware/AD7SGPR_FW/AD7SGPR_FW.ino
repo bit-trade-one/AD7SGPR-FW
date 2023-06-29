@@ -1,4 +1,4 @@
-// bto_ODA_230629V2.6
+// bto_ODA_230629V2.61
 #include <TM1638plus_Model2.h>
 #include <EEPROM.h>
 
@@ -216,59 +216,44 @@ void readSerialDataPrint()
 
 void displayReceivedData(const String &data)
 {
-  // 受信データ表示
   Serial.print("rxData:");
   Serial.println(data);
 
-  // 表示する文字列とドットの位置を格納する変数を初期化
   char displayChars[9] = "        ";
   uint16_t dotPositions = 0;
-  int segmentCount = 0;
   int displayIndex = 7;
+  bool dotFound = false;
 
-  // ドットが含まれているかどうかチェック
-  if (data.indexOf('.') != -1)
-  { // ドットがある場合の処理
-    bool dotFound = false;
-    for (int i = data.length() - 1; i >= 0; i--)
+  for (int i = data.length() - 1; i >= 0; i--)
+  {
+    char c = data[i];
+
+    if (c == '.')
     {
-      char c = data[i]; // Stringの文字を直接取得
-
-      if (c == '.')
+      if (dotFound)
       {
-        if (dotFound)
-        {
-          Serial.println("E1: Multiple dots"); // ドットが複数個合った場合はエラーを返す
-          return;
-        }
-        dotFound = true;
-        dotPositions |= (1 << (7 - displayIndex));
+        Serial.println("E1: Multiple dots");
+        return;
       }
-      else
-      {
-        // 文字がドットでなければ、その文字を表示文字列に追加
-        displayChars[displayIndex--] = c;
-      }
+      dotFound = true;
+      dotPositions |= (1 << (7 - displayIndex));
     }
-  }
-  else
-  { // ドットがない場合の処理
-    for (int i = data.length() - 1; i >= 0; i--)
+    else
     {
-      displayChars[displayIndex--] = data[i]; // Stringの文字を直接取得
+      displayChars[displayIndex--] = c;
     }
   }
 
-  // 文字列を表示し、ドットの位置も指定
   if (displayOn)
   {
     tm.DisplayStr(displayChars, dotPositions);
   }
   else
   {
-    Serial.println(">>>>> During display off mode <<<<<"); // 消灯モード中
+    Serial.println(">>>>> During display off mode <<<<<");
   }
 }
+
 
 void displayClearCommand()
 {
