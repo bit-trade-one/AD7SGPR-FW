@@ -104,7 +104,7 @@ void setup()
   }
 
   if (digitalRead(BUTTON_C) == LOW && digitalRead(BUTTON_D) == LOW)
-  {                    // ABCD同時押し起動でバージョン確認
+  {                    // CD同時押し起動でバージョン確認
     versionLighting(); // 起動時の点灯シーケンス
   }
 
