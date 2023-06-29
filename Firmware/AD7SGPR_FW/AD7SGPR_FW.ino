@@ -1,4 +1,4 @@
-// bto_ODA_230628V2.5
+// bto_ODA_230629V2.6
 #include <TM1638plus_Model2.h>
 #include <EEPROM.h>
 
@@ -47,6 +47,9 @@ volatile uint16_t statusButtonA = 0;
 volatile uint16_t statusButtonB = 0;
 volatile uint16_t statusButtonC = 0;
 volatile uint16_t statusButtonD = 0;
+
+//  最後に表示したものを保持
+String lastrxStr;
 
 // 割り込みハンドラの定義
 void onButtonA()
@@ -100,7 +103,7 @@ void setup()
     tm.brightness(brightness);
   }
 
-  if (digitalRead(BUTTON_A) == LOW && digitalRead(BUTTON_B) == LOW && digitalRead(BUTTON_C) == LOW && digitalRead(BUTTON_D) == LOW)
+  if (digitalRead(BUTTON_C) == LOW && digitalRead(BUTTON_D) == LOW)
   {                    // ABCD同時押し起動でバージョン確認
     versionLighting(); // 起動時の点灯シーケンス
   }
@@ -175,6 +178,7 @@ void readSerialDataPrint()
             displayAnimation();
           }
           displayHexPattern(rxStr.substring(4));
+          lastrxStr = rxStr;
         }
         else
         {
@@ -183,6 +187,7 @@ void readSerialDataPrint()
             displayAnimation();
           }
           displayReceivedData(rxStr);
+          lastrxStr = rxStr;
         }
       }
     }
@@ -332,7 +337,16 @@ void printModeDisplayButtonBPress()
     {
       Serial.println("7SGon");
       analogWrite(ad7sgprLED, 128); // 裏面LED点灯
+
       displayOn = true;
+      if (lastrxStr.startsWith("@HEX"))
+      {
+        displayHexPattern(lastrxStr.substring(4));
+      }
+      else
+      {
+        displayReceivedData(lastrxStr);
+      }
     }
     else
     {
@@ -366,13 +380,32 @@ void printModeDisplayCommand(const String &printModeDisplayData)
     Serial.println("7sgOn");
     analogWrite(ad7sgprLED, 128); // 裏面LED点灯
     displayOn = true;             // 7セグメントディスプレイ点灯フラグを立てる
+    if (lastrxStr.startsWith("@HEX"))
+    {
+      displayHexPattern(lastrxStr.substring(4));
+    }
+    else
+    {
+      displayReceivedData(lastrxStr);
+    }
+
     break;
 
   default:
+
     Serial.println("rxData:@7SGx");
     Serial.println("7sgOn");
     analogWrite(ad7sgprLED, 128); // 裏面LED点灯
     displayOn = true;             // 7セグメントディスプレイ点灯フラグを立てる
+    if (lastrxStr.startsWith("@HEX"))
+    {
+      displayHexPattern(lastrxStr.substring(4));
+    }
+    else
+    {
+      displayReceivedData(lastrxStr);
+    }
+
     break;
   }
 }
@@ -570,7 +603,7 @@ void versionLighting()
   tm.DisplayStr(setupRxStr.c_str(), 0);
   delay(1000);
   tm.reset();
-  setupRxStr = "V025_bto";
+  setupRxStr = "V026_bto";
   tm.DisplayStr(setupRxStr.c_str(), 0x20);
   delay(1000);
   tm.reset();
